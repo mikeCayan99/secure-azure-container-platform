@@ -20,7 +20,13 @@ jobs:
         run: docker build -t ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }} ./app
 
       - name: Run Docker Image 
-        run: docker run -d -p 8080:8080 ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
+        run: docker run -d --name secure-platform-test -p 8080:8080 ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
+
+      - name: Check container status
+        run: docker ps -a
+
+      - name: show container logs
+        run: docker logs secure-platform-test
 
       - name: Test Docker Image
         run: curl --fail --retry 10 --retry-delay 5 http://localhost:8080/health
