@@ -1,7 +1,7 @@
 name: Container Image CI
 
 on:
-   workflow_dispatch:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,3 +18,9 @@ jobs:
 
       - name: Build Docker Image
         run: docker build -t ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }} ./app
+
+      - name: Run Docker Image 
+        run: docker run -d -p 8080:8080 ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
+
+      - name: Test Docker Image
+        run: curl --fail --retry 10 --retry-delay 5 http://localhost:8080/health
