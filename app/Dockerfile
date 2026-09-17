@@ -6,7 +6,11 @@ COPY requirements.txt .
 
 RUN pip install -r requirements.txt
 
-COPY . .
+RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser
+
+COPY --chown=appuser:appgroup . .
+
+USER appuser
 
 EXPOSE 8080
 
