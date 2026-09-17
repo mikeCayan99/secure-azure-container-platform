@@ -29,4 +29,4 @@ jobs:
         run: docker logs secure-platform-test
 
       - name: Test Docker Image
-        run: curl --fail --retry 10 --retry-delay 5 http://localhost:8080/health
+        run: curl --fail --retry 10 --retry-delay 5 http://127.0.0.1:8080/health
