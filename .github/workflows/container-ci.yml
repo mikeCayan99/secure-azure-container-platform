@@ -22,8 +22,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/mikecayan99/secure-azure-container-platform
+          tags: |
+            type=ref,event=branch
+            type=sha
+
+      - name: Show Docker metadata tags
+        run: echo "${{ steps.meta.outputs.tags }}"
+
       - name: Build Docker Image
-        run: docker build -t ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }} ./app
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
 
       - name: Run Docker Image 
         run: docker run -d --name secure-platform-test -p 127.0.0.1:8080:8080 ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
