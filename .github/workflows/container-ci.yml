@@ -43,6 +43,16 @@ jobs:
             --retry-all-errors \
             http://127.0.0.1:8080/health
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: 'ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}'
+          format: 'table'
+          exit-code: '0'
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+
       - name: Log in to GHCR
         if: ${{ github.event_name == 'push' }}
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
