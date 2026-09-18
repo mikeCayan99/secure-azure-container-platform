@@ -1,7 +1,12 @@
 name: Container Image CI
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -39,6 +44,7 @@ jobs:
             http://127.0.0.1:8080/health
 
       - name: Log in to GHCR
+        if: ${{ github.event_name == 'push' }}
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
         with:
           registry: ghcr.io
@@ -46,4 +52,5 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker Image to GHCR
+        if: ${{ github.event_name == 'push' }}
         run: docker push ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
