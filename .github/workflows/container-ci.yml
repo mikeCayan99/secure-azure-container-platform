@@ -79,4 +79,4 @@ jobs:
 
       - name: Push Docker Image to GHCR
         if: ${{ github.event_name == 'push' }}
-        run: docker push ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
+        run: docker push ghcr.io/mikecayan99/secure-azure-container-platform:${{ steps.meta.outputs.version }}
