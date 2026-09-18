@@ -42,7 +42,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: Run Docker Image 
-        run: docker run -d --name secure-platform-test -p 127.0.0.1:8080:8080 ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}
+        run: docker run -d --name secure-platform-test -p 127.0.0.1:8080:8080 ghcr.io/mikecayan99/secure-azure-container-platform:${{ steps.meta.outputs.version }}
 
       - name: Check container status
         run: docker ps -a
