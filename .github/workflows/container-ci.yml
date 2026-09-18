@@ -16,23 +16,20 @@ jobs:
 
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/mikecayan99/secure-azure-container-platform
           tags: |
             type=ref,event=branch
             type=sha
-
-      - name: Show Docker metadata tags
-        run: echo "${{ steps.meta.outputs.tags }}"
 
       - name: Build Docker Image
         uses: docker/build-push-action@v7
