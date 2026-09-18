@@ -62,7 +62,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: 'ghcr.io/mikecayan99/secure-azure-container-platform:${{ github.sha }}'
+          image-ref: 'ghcr.io/mikecayan99/secure-azure-container-platform:${{ steps.meta.outputs.version }}'
           format: 'table'
           exit-code: '0'
           vuln-type: 'os,library'
