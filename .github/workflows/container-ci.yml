@@ -4,9 +4,15 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - "app/**"
+      - ".github/workflows/container-ci.yml"
   push:
     branches:
       - main
+    paths:
+      - "app/**"
+      - ".github/workflows/container-ci.yml"
 
 jobs:
 
