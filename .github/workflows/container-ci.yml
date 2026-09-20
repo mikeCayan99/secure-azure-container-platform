@@ -8,13 +8,12 @@ on:
     branches:
       - main
 
-permissions:
-  contents: read
-  packages: write
-
 jobs:
 
-  build:
+  build-test:
+
+    permissions:
+      contents: read
 
     runs-on: ubuntu-24.04
 
@@ -66,15 +65,40 @@ jobs:
           ignore-unfixed: true
           severity: 'CRITICAL'
 
+  publish:
+    needs: build-test
+
+    if: ${{ github.event_name == 'push' }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/mikecayan99/secure-azure-container-platform
+          tags: |
+            type=ref,event=branch
+            type=sha
 
       - name: Log in to GHCR
-        if: ${{ github.event_name == 'push' }}
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push Docker Image to GHCR
-        if: ${{ github.event_name == 'push' }}
-        run: docker push ghcr.io/mikecayan99/secure-azure-container-platform:${{ steps.meta.outputs.version }}
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
