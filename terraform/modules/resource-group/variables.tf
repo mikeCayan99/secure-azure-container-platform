@@ -9,3 +9,4 @@ variable "name" {
   description = "Name of the resource group"
   default     = "rg-secure-azure-container-platform"
 }
+

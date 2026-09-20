@@ -1,5 +1,7 @@
-resource "azurerm_resource_group" "main" {
-  name     = "rg-secure-azure-container-platform"
+module "resource_group" {
+  source = "./modules/resource-group"
+
+  name     = var.name
   location = var.location
-  tags     = var.tags
 }
+
