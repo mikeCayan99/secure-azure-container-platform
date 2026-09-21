@@ -13,4 +13,13 @@ module "container_app_environment" {
   resource_group_name = module.resource_group.resource_group
 }
 
+module "container_app" {
+  source = "./modules/container-app"
+
+  name                         = var.container_app_name
+  container_app_environment_id = var.container_app_environment_id
+  resource_group_name          = var.resource_group_name
+  image                        = var.container_image
+  allowed_ip_ranges            = var.allowed_ip_ranges
+}
 
