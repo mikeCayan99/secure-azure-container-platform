@@ -26,18 +26,18 @@ resource "azurerm_container_app" "main" {
       percentage      = 100
       latest_revision = true
     }
-  
 
-  dynamic "ip_security_restriction" {
-    for_each = var.allowed_ip_ranges
 
-    content {
-      ip_address_range = ip_security_restriction.value
-      action           = "Allow"
-      name             = "allowed-ip-${ip_security_restriction.key}"
+    dynamic "ip_security_restriction" {
+      for_each = var.allowed_ip_ranges
+
+      content {
+        ip_address_range = ip_security_restriction.value
+        action           = "Allow"
+        name             = "allowed-ip-${ip_security_restriction.key}"
+      }
     }
   }
-}
 }
 
 
