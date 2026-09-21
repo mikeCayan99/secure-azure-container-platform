@@ -14,3 +14,14 @@ output "container_app_environment_location" {
   value = module.container_app_environment.location
 }
 
+output "container_app_environment_id" {
+  value = module.container_app_environment.id
+}
+
+output "container_app_id" {
+  value = module.container_app.container_app_id
+}
+
+output "container_app_name" {
+  value = module.container_app.container_app_name
+}
