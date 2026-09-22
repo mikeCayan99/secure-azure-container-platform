@@ -16,11 +16,6 @@ variable "container_app_environment_name" {
   default     = "cae-secure-azure-container-platform"
 }
 
-variable "container_app_environment_id" {
-  type        = string
-  description = "ID of the Container App Environment"
-}
-
 variable "container_app_name" {
   type        = string
   description = "Name of the Container App"

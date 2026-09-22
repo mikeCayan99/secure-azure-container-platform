@@ -18,7 +18,7 @@ resource "azurerm_container_app" "main" {
   ingress {
     external_enabled           = true
     target_port                = 8080
-    transport                  = "Auto"
+    transport                  = "auto"
     allow_insecure_connections = false
 
     traffic_weight {
