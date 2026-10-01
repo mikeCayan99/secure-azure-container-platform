@@ -1,0 +1,7 @@
+container_app_name = "ca-secure-azure-container-platform"
+
+container_image = "ghcr.io/mikecayan99/secure-azure-container-platform:main"
+
+allowed_ip_ranges = [
+  "203.0.113.10/32"
+]

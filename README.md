@@ -1,85 +1,163 @@
 # Secure Azure Container Platform
-
-A security-focused container delivery platform built with **Terraform, Docker, GitHub Actions, GHCR, and Microsoft Azure**.
-
-The project demonstrates how a containerized application can be built, validated, security-scanned, published, and ultimately deployed to Azure using Infrastructure as Code and automated CI workflows.
-
-The repository is designed around practical Cloud and DevOps engineering patterns rather than isolated technology demonstrations.
-
+ 
+A security-focused container platform built with **Terraform, Docker, GitHub Actions, GHCR, and Microsoft Azure**.
+ 
+The project demonstrates practical Cloud and DevOps engineering patterns around containerization, CI automation, vulnerability scanning, Infrastructure as Code, and Azure Container Apps.
+ 
+The repository is developed incrementally. Implemented components are kept separate from planned capabilities so that the documented architecture reflects the actual project state.
+ 
 ---
-
+ 
+## Table of Contents
+ 
+- [Project Overview](#project-overview)
+- [Architecture](#architecture)
+- [Current Implementation](#current-implementation)
+- [Container Image CI](#container-image-ci)
+- [Container Security](#container-security)
+- [GitHub Container Registry](#github-container-registry)
+- [GitHub Actions Hardening](#github-actions-hardening)
+- [Terraform Infrastructure](#terraform-infrastructure)
+- [Terraform Configuration](#terraform-configuration)
+- [Terraform CI](#terraform-ci)
+- [Workflows](#workflows)
+- [Repository Structure](#repository-structure)
+- [Technologies](#technologies)
+- [Security Principles](#security-principles)
+- [Cost Control](#cost-control)
+- [Roadmap](#roadmap)
+- [Project Status](#project-status)
+---
+ 
 ## Project Overview
-
-The platform combines application containerization, CI automation, container security, Infrastructure as Code, and Azure deployment into a single workflow.
-
-The current implementation focuses on two independent areas:
-
-- **Container delivery** — building, testing, scanning, and publishing the application container
-- **Infrastructure validation** — managing Azure infrastructure with Terraform and validating infrastructure changes through CI
-
-Infrastructure and application workflows are intentionally separated so that changes only trigger the CI processes relevant to them.
-
+ 
+The platform currently combines three main areas:
+ 
+- **Container delivery**: building, testing, scanning, and publishing a container image
+- **Infrastructure as Code**: provisioning Azure resources through reusable Terraform modules
+- **CI validation**: independently validating application and infrastructure changes
+Application and infrastructure workflows are intentionally separated so that changes only trigger the CI processes relevant to them.
+ 
+The Azure infrastructure currently includes:
+ 
+- Resource Group
+- Azure Container Apps Environment
+- Azure Container App
+- HTTPS-only external ingress
+- Configurable IP restrictions
+- Scale-to-zero configuration
+> **Note:** The remaining Azure runtime integration, including secure authentication to the private container registry, is intentionally not considered complete yet.
+ 
 ---
-
+ 
 ## Architecture
-
+ 
 ```text
-                         GitHub Repository
-                                |
-                 +--------------+--------------+
-                 |                             |
-                 v                             v
-              app/**                      terraform/**
-                 |                             |
-                 v                             v
-          Container Image CI              Terraform CI
-                 |                             |
-        +--------+--------+            +-------+-------+
-        |        |        |            |       |       |
-        v        v        v            v       v       v
-      Build   Health    Trivy          fmt    init   validate
-              Check     Scan
-        |                 |
-        +--------+--------+
-                 |
-                 v
-                GHCR
-          Private Container
-               Image
-                 |
-                 v
-        Azure Container Platform
-             (planned)
+                    GitHub Repository
+                           |
+            +--------------+--------------+
+            |                             |
+            v                             v
+         app/**                      terraform/**
+            |                             |
+            v                             v
+    Container Image CI               Terraform CI
+            |                             |
+   +--------+--------+             +------+------+
+   |        |        |             |      |      |
+   v        v        v             v      v      v
+ Build    Health   Trivy          fmt    init  validate
+          Check    Scan
+   |                 |
+   +--------+--------+
+            |
+            v
+          GHCR
+   Container Registry
+            |
+            |  Runtime integration
+            |  (not yet completed)
+            v
+   Azure Container Apps
+   (Terraform foundation)
 ```
-
-The Azure runtime layer will be introduced incrementally using Terraform.
-
+ 
+Terraform currently defines the Azure runtime infrastructure, while secure registry authentication and end-to-end deployment of the GHCR image remain future implementation steps.
+ 
 ---
-
+ 
 ## Current Implementation
-
+ 
 ### Containerized Application
-
+ 
 The repository contains a lightweight Flask application used as the workload for the platform.
-
+ 
 The application provides:
-
+ 
 - HTTP application endpoint
 - `/health` health endpoint
-- Containerized Python runtime
+- Python / Flask runtime
 - Port `8080`
 - Non-root container execution
-
-The Docker image is built from a minimal Python base image and runs using a dedicated unprivileged user.
-
+Example response from the root endpoint:
+ 
+```text
+Secure Azure Container Platform is running
+```
+ 
+Health endpoint:
+ 
+```text
+GET /health
+```
+ 
+Example response:
+ 
+```json
+{
+  "status": "ok"
+}
+```
+ 
+### Docker Container
+ 
+The application is packaged using a minimal Python container image.
+ 
+Current container hardening includes:
+ 
+- `python:3.14-slim` base image
+- Dedicated Linux group
+- Dedicated non-root application user
+- Application files owned by the application user
+- Runtime execution as an unprivileged user
+- Dependency installation without retaining the pip download cache
+- Reduced Docker build context through `.dockerignore`
+The container listens on port `8080`.
+ 
+Build locally:
+ 
+```bash
+docker build -t secure-azure-container-platform:local ./app
+```
+ 
+Run locally:
+ 
+```bash
+docker run --rm -p 8080:8080 secure-azure-container-platform:local
+```
+ 
+Validate health:
+ 
+```bash
+curl http://localhost:8080/health
+```
+ 
 ---
-
-### Container Image CI
-
-Application changes under `app/**` trigger the container workflow.
-
-The workflow performs:
-
+ 
+## Container Image CI
+ 
+Changes under `app/**` trigger the container workflow.
+ 
 ```text
 Checkout
    ↓
@@ -95,99 +173,207 @@ Trivy Vulnerability Scan
    ↓
 Publish to GHCR
 ```
+ 
+- Pull requests perform build, runtime validation, and vulnerability scanning **without** publishing an image.
+- Publishing only occurs after changes are merged or pushed to the configured `main` workflow path.
+- The publish job depends on successful completion of the build and validation job.
 
-Pull requests perform build, runtime validation, and security scanning without publishing an image.
-
-Image publishing only occurs after changes reach the configured push workflow.
-
-The publish job depends on successful completion of the build and validation job.
-
+### Runtime Validation
+ 
+The CI pipeline starts the built image temporarily and binds it only to the GitHub Actions runner loopback interface:
+ 
+```text
+127.0.0.1:8080
+```
+ 
+The pipeline then validates `/health`. The health request uses retries so that short container startup delays do not immediately fail the workflow.
+ 
 ---
-
-### Container Security
-
+ 
+## Container Security
+ 
 Container security is integrated directly into the CI workflow.
-
+ 
 Current controls include:
-
+ 
 - Non-root container execution
-- Minimal container base image
+- Minimal Python base image
 - Automated runtime health validation
 - Trivy vulnerability scanning
-- CI failure for configured critical vulnerabilities
-- Private container image storage
+- Critical vulnerability failure policy
+- Operating-system and application dependency scanning
 - Restricted GitHub Actions permissions
-
-Trivy scans both operating-system packages and application libraries.
-
+- Controlled container publishing
+- Immutable GitHub Actions references
+Trivy scans the following vulnerability types:
+ 
+```text
+os
+library
+```
+ 
+The pipeline fails on vulnerabilities with severity `CRITICAL`. Unfixed vulnerabilities are currently ignored by the configured scan policy.
+ 
 ---
-
-### GitHub Container Registry
-
-Container images are stored in **GitHub Container Registry (GHCR)**.
-
+ 
+## GitHub Container Registry
+ 
+Container images are published to:
+ 
 ```text
 ghcr.io/mikecayan99/secure-azure-container-platform
 ```
-
-The container package is private.
-
-GitHub Actions authenticates to GHCR using the workflow-provided `GITHUB_TOKEN`. Publishing permissions are restricted to the job that requires package write access.
-
+ 
+GitHub Actions authenticates to GHCR using the workflow-provided `GITHUB_TOKEN`. No separate long-lived registry password is stored in the repository.
+ 
+Package publishing permission is limited to the publish job:
+ 
+```yaml
+permissions:
+  contents: read
+  packages: write
+```
+ 
+The build and validation job only requires:
+ 
+```yaml
+permissions:
+  contents: read
+```
+ 
+Container package visibility is managed through GitHub package settings.
+ 
 ---
-
+ 
+## GitHub Actions Hardening
+ 
+External GitHub Actions used by the repository are pinned to immutable commit SHAs rather than relying only on moving major-version tags.
+ 
+Examples include:
+ 
+- `actions/checkout`
+- `hashicorp/setup-terraform`
+- `docker/metadata-action`
+- `docker/build-push-action`
+- `docker/login-action`
+- `aquasecurity/trivy-action`
+This reduces the risk of an external action reference changing unexpectedly while preserving version comments for readability.
+ 
+---
+ 
 ## Terraform Infrastructure
-
-Azure infrastructure is managed using Terraform and the AzureRM provider.
-
-The Terraform configuration uses local reusable modules to separate infrastructure components from the root configuration.
-
-Current structure:
-
+ 
+Azure infrastructure is managed using Terraform and the AzureRM provider. The configuration uses reusable local modules.
+ 
 ```text
-terraform/
-├── main.tf
-├── outputs.tf
-├── providers.tf
-├── variables.tf
-├── versions.tf
-└── modules/
-    └── resource-group/
-        ├── main.tf
-        ├── outputs.tf
-        └── variables.tf
+terraform/modules/
+├── resource-group/
+├── container-app-environment/
+└── container-app/
 ```
-
-The Resource Group is implemented as a dedicated Terraform module.
-
-The root module passes configuration values to the child module and consumes the module outputs.
-
-Conceptually:
-
+ 
+### Resource Group Module
+ 
+Manages the Azure Resource Group used by the platform.
+ 
+Outputs:
+ 
+- Resource Group name
+- Azure location
+### Container App Environment Module
+ 
+Creates the Azure Container Apps runtime environment.
+ 
+Outputs:
+ 
+- Environment name
+- Location
+- Resource Group name
+- Environment resource ID
+### Container App Module
+ 
+Defines the application runtime.
+ 
+| Setting          | Value               |
+| ---------------- | ------------------- |
+| Revision mode    | Single              |
+| CPU              | `0.25`              |
+| Memory           | `0.5 GiB`           |
+| Min replicas     | `0`                 |
+| Max replicas     | `1`                 |
+| Ingress          | External, port 8080 |
+| Connections      | HTTPS only          |
+| IP allow rules   | Configurable        |
+ 
+Scale configuration:
+ 
 ```text
-Root Variables
-      ↓
-Module Arguments
-      ↓
-Child Module Variables
-      ↓
-Azure Resource
-      ↓
-Child Module Outputs
-      ↓
-Root Outputs
+min_replicas = 0
+max_replicas = 1
 ```
-
-This structure allows additional Azure components to be introduced without placing all infrastructure configuration in a single Terraform file.
-
+ 
+This allows the application to scale down when not required and supports the project's cost-control goals.
+ 
+### Network Access Restrictions
+ 
+The Container App module supports configurable IP ranges:
+ 
+```hcl
+allowed_ip_ranges = [
+  "203.0.113.10/32"
+]
+```
+ 
+Terraform dynamically creates Azure Container App ingress IP security restrictions for the supplied ranges. The address above is only an example value.
+ 
 ---
-
+ 
+## Terraform Configuration
+ 
+The project uses Terraform with the AzureRM provider `~> 5.0`.
+ 
+Provider configuration and required provider constraints are separated using the conventional structure:
+ 
+```text
+providers.tf
+versions.tf
+```
+ 
+### Terraform Variables
+ 
+Important configurable values:
+ 
+```text
+location
+resource_group_name
+container_app_environment_name
+container_app_name
+container_image
+allowed_ip_ranges
+```
+ 
+A safe example configuration is included as `terraform/terraform.tfvars.example`.
+ 
+Copy it locally when creating a real configuration:
+ 
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+ 
+On PowerShell:
+ 
+```powershell
+Copy-Item terraform.tfvars.example terraform.tfvars
+```
+ 
+Then replace the example values with the required deployment values. The real `terraform.tfvars` file is excluded from Git through `.gitignore`.
+ 
+---
+ 
 ## Terraform CI
-
-Terraform changes under `terraform/**` trigger a dedicated Terraform CI workflow.
-
-The workflow performs:
-
+ 
+Changes under `terraform/**` trigger a dedicated Terraform validation workflow.
+ 
 ```text
 Checkout
    ↓
@@ -199,107 +385,62 @@ terraform init -backend=false
    ↓
 terraform validate
 ```
-
-The workflow currently performs **static validation only**.
-
-It does not automatically execute:
-
+ 
+The CI workflow intentionally performs static validation only. It does **not** automatically execute:
+ 
 ```text
 terraform plan
 terraform apply
 terraform destroy
 ```
-
-Infrastructure-changing operations remain intentional and manually reviewed.
-
-This avoids CI automatically modifying Azure resources while the infrastructure architecture is still being developed.
-
+ 
+Infrastructure-changing operations therefore remain explicit and manually controlled.
+ 
 ---
-
-## CI Workflow Separation
-
-Container and Terraform validation are implemented as separate GitHub Actions workflows.
-
+ 
+## Workflows
+ 
+### CI Workflow Separation
+ 
+Container and Terraform validation use independent GitHub Actions workflows.
+ 
 ```text
-app/**
-   ↓
-Container Image CI
-
-
-terraform/**
-   ↓
-Terraform CI
+app/**        →  Container Image CI
+terraform/**  →  Terraform CI
 ```
-
-Each workflow also runs when its own workflow definition is modified.
-
-This prevents unrelated changes from unnecessarily triggering both pipelines.
-
----
-
-## Git Workflow
-
-Changes are developed using short-lived feature branches and Pull Requests.
-
+ 
+Each workflow also triggers when its own workflow definition changes. This prevents unrelated repository changes from unnecessarily running every pipeline.
+ 
+### Git Workflow
+ 
+Changes are developed using short-lived branches and Pull Requests.
+ 
 ```text
-Feature Branch
-      ↓
+Feature / Chore Branch
+        ↓
 Development
-      ↓
+        ↓
 Local Validation
-      ↓
+        ↓
 Commit
-      ↓
+        ↓
 Push
-      ↓
+        ↓
 Pull Request
-      ↓
-Automated CI Checks
-      ↓
+        ↓
+Automated CI
+        ↓
 Review
-      ↓
+        ↓
 Merge to main
 ```
-
-CI validation is used before changes are integrated into the main branch.
-
----
-
-## Local Container Workflow
-
-The application can also be built and tested locally.
-
-Typical workflow:
-
-```text
-Dockerfile
-    ↓
-docker build
-    ↓
-docker run
-    ↓
-Health Validation
-    ↓
-docker logs / inspect / exec
-```
-
-Operational Docker commands are used for troubleshooting and runtime inspection.
-
-Examples include:
-
-```text
-docker ps
-docker logs
-docker inspect
-docker exec
-```
-
----
-
-## Terraform Workflow
-
-Infrastructure changes follow a reviewed Terraform workflow:
-
+ 
+CI validation is performed before repository changes are integrated into `main`.
+ 
+### Terraform Workflow
+ 
+Infrastructure development follows a reviewed Terraform workflow:
+ 
 ```text
 terraform init
       ↓
@@ -315,19 +456,13 @@ terraform apply
       ↓
 Validation
 ```
-
-Resources used for temporary testing can be removed using:
-
-```text
-terraform destroy
-```
-
-Infrastructure changes are reviewed before execution.
-
+ 
+Temporary Azure resources can later be removed using `terraform destroy`. Infrastructure-changing operations are intentionally kept outside the automatic CI workflow.
+ 
 ---
-
+ 
 ## Repository Structure
-
+ 
 ```text
 .
 ├── .github/
@@ -336,154 +471,157 @@ Infrastructure changes are reviewed before execution.
 │       └── terraform-ci.yml
 │
 ├── app/
-│   ├── app.py
+│   ├── .dockerignore
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   └── .dockerignore
+│   ├── app.py
+│   └── requirements.txt
 │
 ├── terraform/
 │   ├── modules/
-│   │   └── resource-group/
+│   │   ├── resource-group/
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── variables.tf
+│   │   │
+│   │   ├── container-app-environment/
+│   │   │   ├── main.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── variables.tf
+│   │   │
+│   │   └── container-app/
+│   │       ├── main.tf
+│   │       ├── outputs.tf
+│   │       └── variables.tf
+│   │
+│   ├── .terraform.lock.hcl
 │   ├── main.tf
 │   ├── outputs.tf
 │   ├── providers.tf
+│   ├── terraform.tfvars.example
 │   ├── variables.tf
 │   └── versions.tf
 │
 ├── .gitignore
 └── README.md
 ```
-
-The repository structure will evolve as additional Azure infrastructure components are introduced.
-
+ 
 ---
-
+ 
 ## Technologies
-
-### Currently Used
-
+ 
 - Microsoft Azure
-- Terraform
-- AzureRM Provider
+- Azure Container Apps
+- Azure CLI
+- Terraform (AzureRM Provider)
 - Docker
 - Python / Flask
-- Git
-- GitHub
+- Git / GitHub
 - GitHub Actions
-- GitHub Container Registry (GHCR)
+- GitHub Container Registry
 - Trivy
-- Azure CLI
-
-### Planned / Evaluated as the Platform Evolves
-
-Additional Azure services will be introduced only where they support the architecture and security requirements of the platform.
-
-Potential areas include:
-
-- Azure Container Apps
-- Managed Identities
-- Secure secret handling
-- Azure monitoring and diagnostics
-- Additional network and access controls
-
-Planned components are intentionally not treated as implemented features until they are integrated and validated.
-
 ---
-
+ 
 ## Security Principles
-
-Security controls are introduced as part of the engineering workflow rather than as a separate demonstration layer.
-
-Current principles include:
-
-- Least-privilege CI permissions
+ 
+Security controls are introduced as part of the engineering workflow rather than added only as documentation.
+ 
+- Least-privilege GitHub Actions permissions
 - Non-root container execution
 - Automated vulnerability scanning
-- Private container image storage
-- Controlled image publishing
+- Runtime health validation
+- Controlled container publishing
+- Immutable GitHub Actions references
+- HTTPS-only Container App ingress
+- Configurable ingress IP restrictions
 - Explicit infrastructure changes
 - Infrastructure as Code
 - Separation of application and infrastructure validation
-
-Additional Azure-native security controls will be introduced as the runtime architecture is implemented.
-
+Additional Azure-native identity and registry security controls remain future work.
+ 
 ---
-
+ 
 ## Cost Control
-
-The project operates with a strict Azure budget of approximately **20 EUR**.
-
-Cost is therefore treated as an architectural constraint.
-
-Before paid Azure resources are deployed:
-
-1. The resource and expected cost are reviewed.
+ 
+The project operates with a strict Azure learning and development budget of approximately **20 EUR**. Cost is therefore treated as an architectural constraint.
+ 
+Current cost-control decisions:
+ 
+- Container App minimum replicas set to `0`
+- Container App maximum replicas limited to `1`
+- Small container CPU and memory allocation
+- No automatic Terraform deployment from CI
+- Intentional infrastructure creation
+- Destruction of temporary Azure resources after testing
+Before paid Azure infrastructure is deployed:
+ 
+1. Expected resources are reviewed.
 2. Deployment is performed intentionally.
-3. Resources are validated after deployment.
-4. Temporary resources are destroyed when they are no longer required.
-
-Expensive continuously running services are avoided unless they provide a clear engineering benefit.
-
+3. Runtime behavior is validated.
+4. Temporary resources are removed when they are no longer required.
 ---
-
+ 
 ## Roadmap
-
-The platform is being implemented incrementally.
-
+ 
 ### Implemented
-
-- Dockerized Flask application
-- Application health endpoint
-- Non-root container execution
-- Local Docker build and runtime validation
-- Private GHCR container registry
-- Automated container image build
-- Automated container health validation
-- Trivy vulnerability scanning
-- Controlled GHCR image publishing
-- Separate build/test and publish CI jobs
-- Terraform AzureRM foundation
-- Terraform Resource Group module
-- Terraform outputs and module integration
-- Terraform CI validation
-- Path-filtered Container and Terraform workflows
-- Least-privilege GitHub Actions permissions
+ 
+- [x] Dockerized Flask application
+- [x] Application health endpoint
+- [x] Non-root container execution
+- [x] Minimal Python container base image
+- [x] Local Docker build and runtime validation
+- [x] GHCR image publishing
+- [x] Automated container image build
+- [x] Automated container health validation
+- [x] Trivy vulnerability scanning
+- [x] Critical vulnerability failure policy
+- [x] Separate build/test and publish CI jobs
+- [x] Restricted GitHub Actions permissions
+- [x] Immutable GitHub Action references
+- [x] Terraform AzureRM foundation
+- [x] Terraform Resource Group module
+- [x] Terraform Container App Environment module
+- [x] Terraform Container App module
+- [x] Container App HTTPS-only ingress
+- [x] Configurable Container App IP restrictions
+- [x] Scale-to-zero configuration
+- [x] Terraform outputs and module integration
+- [x] Terraform CI validation
+- [x] Path-filtered Container and Terraform workflows
+- [x] `terraform.tfvars.example`
 
 ### Next
-
-- Azure Container Apps infrastructure
-- Container App Environment
-- Deployment of the private GHCR image to Azure
-- Secure registry authentication from Azure
-- Runtime validation in Azure
+ 
+- [ ] Implement secure Container App access to the GHCR image
+- [ ] Validate private container deployment in Azure
+- [ ] Integrate Managed Identity where appropriate
+- [ ] Perform full Azure runtime validation
 
 ### Later
-
-Depending on the requirements of the deployed platform:
-
-- Managed Identity integration
-- Secure application configuration and secret handling
-- Azure monitoring and diagnostics
-- Additional infrastructure security controls
-- CI/CD deployment improvements
-- Terraform remote state
-
-The roadmap may evolve as architectural decisions are validated during implementation.
-
+ 
+Depending on future requirements:
+ 
+- [ ] Azure monitoring and diagnostics
+- [ ] Secure application configuration
+- [ ] Additional network and access controls
+- [ ] Automated Azure deployment
+- [ ] Terraform remote state
+- [ ] Additional CI/CD security controls
 ---
-
+ 
 ## Project Status
-
-**Active Development**
-
-The container build, validation, vulnerability scanning, registry publishing, Terraform module foundation, and CI validation workflows are operational.
-
-The next major milestone is extending the Terraform infrastructure to provide the Azure runtime environment for the containerized application.
-
----
-
-## Disclaimer
-
-This repository is a Cloud / DevOps portfolio project designed to demonstrate practical engineering patterns using Azure, Terraform, Docker, GitHub Actions, container security, and Infrastructure as Code.
-
-The project does not represent a certified production environment and does not claim compliance with regulatory or certification frameworks.
+ 
+The current implementation provides a working foundation for secure container delivery, CI validation, and modular Azure infrastructure.
+ 
+Implemented areas:
+ 
+- Containerization
+- Non-root runtime
+- CI build and runtime validation
+- Vulnerability scanning
+- GHCR publishing
+- Terraform modularization
+- Azure Container Apps infrastructure definition
+- Ingress restrictions
+- Cost-conscious scaling configuration
+- Terraform static validation
+Further Azure runtime capabilities can be added incrementally as the platform evolves.
